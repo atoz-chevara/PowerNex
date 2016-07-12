@@ -8,6 +8,7 @@ import CPU.IDT;
 import Data.Register;
 import Task.Mutex.SpinLockMutex;
 import Data.BitField;
+import Task.Scheduler;
 
 enum ulong MAGIC = 0xDEAD_BEEF_DEAD_C0DE;
 
@@ -220,6 +221,8 @@ private void onPageFault(Registers* regs) {
 	with (regs) {
 		import Data.Color;
 
+		auto currProc = GetScheduler.CurrentProcess;
+
 		scr.Foreground = Color(255, 0, 0);
 		scr.Writeln("===> PAGE FAULT");
 		scr.Writeln("IRQ = ", IntNumber, " | RIP = ", cast(void*)RIP);
@@ -237,6 +240,7 @@ private void onPageFault(Registers* regs) {
 		scr.Writeln("Errorcode: ", cast(void*)ErrorCode, " (", ErrorCode & 0x1 ? " Present" : " NotPresent",
 				ErrorCode & 0x2 ? " Write" : " Read", ErrorCode & 0x4 ? " UserMode" : " KernelMode", ErrorCode & 0x8
 				? " ReservedWrite" : "", ErrorCode & 0x2 ? " InstructionFetch" : "", " )");
+		scr.Writeln("PID = ", currProc.pid, " | ProcessName = ", currProc.name);
 
 		log.Fatal("===> PAGE FAULT", "\n", "IRQ = ", IntNumber, " | RIP = ", cast(void*)RIP, "\n", "RAX = ",
 				cast(void*)RAX, " | RBX = ", cast(void*)RBX, "\n", "RCX = ", cast(void*)RCX, " | RDX = ",
@@ -247,6 +251,7 @@ private void onPageFault(Registers* regs) {
 				cast(void*)R15, "\n", " CS = ", cast(void*)CS, "  |  SS = ", cast(void*)SS, "\n", " CR2 = ",
 				cast(void*)CR2, "\n", "Flags: ", cast(void*)Flags, "\n", "Errorcode: ", cast(void*)ErrorCode, " (",
 				ErrorCode & 0x1 ? " Present" : " NotPresent", ErrorCode & 0x2 ? " Write" : " Read", ErrorCode & 0x4
-				? " UserMode" : " KernelMode", ErrorCode & 0x8 ? " ReservedWrite" : "", ErrorCode & 0x2 ? " InstructionFetch" : "", " )");
+				? " UserMode" : " KernelMode", ErrorCode & 0x8 ? " ReservedWrite" : "", ErrorCode & 0x2 ? " InstructionFetch" : "", " )\n",
+				"PID = ", currProc.pid, " | ProcessName = ", currProc.name);
 	}
 }
