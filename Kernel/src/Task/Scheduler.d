@@ -12,6 +12,7 @@ private extern (C) {
 	ulong getRIP();
 	void fpuEnable();
 	void fpuDisable();
+	void forkHelper();
 	void cloneHelper();
 }
 
@@ -110,47 +111,26 @@ public:
 		process.image.userStack = userStack;
 		process.image.kernelStack = kernelStack;
 
-		void set(T = ulong)(ref VirtAddress stack, T value) {
-			auto size = T.sizeof;
-			*(stack - size).Ptr!T = value;
-			stack -= size;
-		}
-
 		process.syscallRegisters = current.syscallRegisters;
 
 		memcpy((userStack - StackSize).Ptr, (current.image.userStack - StackSize).Ptr, StackSize);
+		memcpy((kernelStack - StackSize).Ptr, (current.image.kernelStack - StackSize).Ptr, StackSize);
 
-		ulong oldStack = (current.image.userStack - StackSize).Int;
-		long stackDiff = (userStack - current.image.userStack).Int;
-		log.Debug("UserStack: ", userStack.Ptr, " oldStack: ", current.image.userStack.Ptr, " diff: ", cast(void*)stackDiff);
+		ulong storeRIP = getRIP();
+		if (storeRIP == SWITCH_MAGIC) {
+			//TODO remove this once paging works
+			while(true) {
 
-		void fixStack(ref ulong val) {
-			if (oldStack <= val && val <= oldStack + StackSize) {
-				log.Debug("Changing: ", cast(void*)val, " to: ", cast(void*)(val + stackDiff));
-				val += stackDiff;
 			}
+			return 0;
 		}
 
-		with (process.syscallRegisters) {
-			fixStack(R15);
-			fixStack(R14);
-			fixStack(R13);
-			fixStack(R12);
-			fixStack(R11);
-			fixStack(R10);
-			fixStack(R9);
-			fixStack(R8);
-			fixStack(RBP);
-			fixStack(RDI);
-			fixStack(RSI);
-			fixStack(RDX);
-			fixStack(RCX);
-			fixStack(RBX);
-			RAX = 0;
-			fixStack(RSP);
+		ulong storeRBP = void;
+		ulong storeRSP = void;
+		asm {
+			mov storeRBP[RBP], RBP;
+			mov storeRSP[RBP], RSP;
 		}
-
-		set(kernelStack, process.syscallRegisters);
 
 		with (process) {
 			pid = getFreePid;
@@ -161,23 +141,25 @@ public:
 
 			parent = current.parent;
 
-			threadState.rip = VirtAddress(&cloneHelper);
-			threadState.rbp = kernelStack;
-			threadState.rsp = kernelStack;
+			threadState.rip = storeRIP;
+			threadState.rbp = kernelStack - (current.image.kernelStack - storeRBP);
+			threadState.rsp = kernelStack - (current.image.kernelStack - storeRSP);
 			threadState.fpuEnabled = current.threadState.fpuEnabled;
-			threadState.paging = new Paging(current.threadState.paging);
+			//TODO
+			threadState.paging = current.threadState.paging;//new Paging(current.threadState.paging);
 
 			kernelProcess = current.kernelProcess;
 
 			state = ProcessState.Running;
 		}
 
-		if (process.parent)
+		if (process.parent) {
 			with (process.parent) {
 				if (!children)
 					children = new LinkedList!Process;
 				children.Add(process);
 			}
+		}
 
 		allProcesses.Add(process);
 		readyProcesses.Add(process);
